@@ -1,0 +1,24 @@
+streamlit
+langchain
+langchain-openai
+langchain-community
+langchain-huggingface
+pandas
+matplotlib
+plotly
+faiss-cpu
+python-dotenv
+scikit-learn
+numpy
+sentence-transformers
+requests
+openai
+tiktoken
+pypdf
+
+# Machine learning dependencies
+transformers
+torch
+accelerate
+bitsandbytes
+codecarbon
