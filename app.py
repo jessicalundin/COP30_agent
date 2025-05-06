@@ -14,12 +14,18 @@ import torch
 import gc
 import hashlib
 import base64
+import altair as alt
+
+# Set tokenizers parallelism to avoid fork warnings
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # RAG components
-from langchain.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -31,9 +37,9 @@ load_dotenv()
 
 # Authentication credentials - ideally these would be stored in .env file
 # or using a more secure method
-DEFAULT_USERNAME = os.environ.get("APP_USERNAME", "admin")
-DEFAULT_PASSWORD = os.environ.get("APP_PASSWORD", "climate2024")
-DEFAULT_OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
+DEFAULT_USERNAME = os.environ.get("APP_USERNAME")
+DEFAULT_PASSWORD = os.environ.get("APP_PASSWORD")
+DEFAULT_OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 DEFAULT_HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
 # Function to create password hash
@@ -171,7 +177,7 @@ with st.sidebar:
     # Information about models and emissions
     st.markdown("---")
     st.markdown("## About")
-    st.markdown("This app allows you to ask questions about Climate Change, COP29, Brazil, and Dengue Fever using a Retrieval-Augmented Generation (RAG) system.")
+    st.markdown("This app allows you to ask questions about Climate Change, COP30, Brazil, and Dengue Fever using a Retrieval-Augmented Generation (RAG) system.")
     st.markdown("You can also explore climate data visualizations.")
     
     if model_option != "OpenAI (GPT-3.5)":
@@ -243,25 +249,32 @@ def create_rag_system(docs_data, model_option="OpenAI (GPT-3.5)"):
         temp_dir = tempfile.mkdtemp()
         document_loaders = []
         
+        # Process uploaded documents
         for i, doc_data in enumerate(docs_data):
             file_path = os.path.join(temp_dir, f"document_{i}.pdf")
             with open(file_path, "wb") as f:
                 f.write(doc_data)
             document_loaders.append(PyPDFLoader(file_path))
         
-        # Add context documents about COP29, climate change, Brazil, and Dengue fever
-        with open(os.path.join(temp_dir, "cop29_info.txt"), "w") as f:
-            f.write(get_cop29_info())
-        document_loaders.append(TextLoader(os.path.join(temp_dir, "cop29_info.txt")))
-        
-        with open(os.path.join(temp_dir, "dengue_info.txt"), "w") as f:
-            f.write(get_dengue_info())
-        document_loaders.append(TextLoader(os.path.join(temp_dir, "dengue_info.txt")))
+        # Load documents from the docs directory
+        docs_dir = "docs"
+        if os.path.exists(docs_dir):
+            for filename in os.listdir(docs_dir):
+                file_path = os.path.join(docs_dir, filename)
+                if filename.lower().endswith('.pdf'):
+                    document_loaders.append(PyPDFLoader(file_path))
+                elif filename.lower().endswith(('.txt', '.md')):
+                    document_loaders.append(TextLoader(file_path))
+        else:
+            st.warning("Docs directory not found. Create a 'docs' folder and add your documents there.")
         
         # Load and process documents
         documents = []
         for loader in document_loaders:
-            documents.extend(loader.load())
+            try:
+                documents.extend(loader.load())
+            except Exception as e:
+                st.warning(f"Error loading document: {e}")
         
         # Split documents into chunks
         text_splitter = RecursiveCharacterTextSplitter(
@@ -324,21 +337,21 @@ def run_llama_inference(model, tokenizer, prompt, max_new_tokens=512):
     response = response[len(tokenizer.decode(inputs.input_ids[0], skip_special_tokens=True)):]
     return response.strip()
 
-# Function to get sample text about COP29
-def get_cop29_info():
+# Function to get sample text about COP30
+def get_COP30_info():
     return """
-    COP29: The 29th Conference of the Parties to the UN Framework Convention on Climate Change
+    COP30: The 29th Conference of the Parties to the UN Framework Convention on Climate Change
     
-    COP29 is scheduled to be held in Baku, Azerbaijan in November 2024. This conference is a crucial part of the global effort to combat climate change, following the Paris Agreement's framework.
+    COP30 is scheduled to be held in Baku, Azerbaijan in November 2024. This conference is a crucial part of the global effort to combat climate change, following the Paris Agreement's framework.
     
-    Key topics expected at COP29:
+    Key topics expected at COP30:
     1. Climate finance - particularly focusing on the new climate finance goal beyond the previous $100 billion annual target
     2. Implementation of the Loss and Damage Fund established at COP27
     3. Assessment of progress on nationally determined contributions (NDCs)
     4. Advancing adaptation measures for vulnerable countries
     5. Strengthening mitigation efforts to limit global warming to 1.5°C
     
-    COP29 comes at a critical time when global emissions need to be reduced drastically to meet the Paris Agreement goals. The conference will address the gap between current pledges and what science indicates is necessary to avoid catastrophic climate impacts.
+    COP30 comes at a critical time when global emissions need to be reduced drastically to meet the Paris Agreement goals. The conference will address the gap between current pledges and what science indicates is necessary to avoid catastrophic climate impacts.
     
     The previous conference, COP28 in Dubai, UAE, concluded with agreements on the operationalization of the loss and damage fund and the first global stocktake of the Paris Agreement. However, many climate advocates noted that more ambitious action is still needed on fossil fuel phase-out and adaptation financing.
     """
@@ -367,7 +380,7 @@ def get_dengue_info():
     - Vaccination campaigns
     - Community education
     
-    The intersection of climate policy and public health policy is increasingly important for addressing vector-borne diseases like dengue fever, highlighting the need for integrated approaches at events like COP29.
+    The intersection of climate policy and public health policy is increasingly important for addressing vector-borne diseases like dengue fever, highlighting the need for integrated approaches at events like COP30.
     """
 
 # Function to get climate data
@@ -440,7 +453,7 @@ tab1, tab2, tab3 = st.tabs(["RAG Assistant", "Climate Data", "Brazil & Dengue"])
 
 # Tab 1: RAG Assistant
 with tab1:
-    st.header("Ask me about Climate Change, COP29, Brazil, or Dengue Fever")
+    st.header("Ask me about Climate Change, COP30, Brazil, or Dengue Fever")
     
     # Document uploader
     st.subheader("Upload Documents (Optional)")
@@ -474,7 +487,7 @@ with tab1:
     
     # Question input
     st.subheader("Ask a Question")
-    question = st.text_input("Type your question here:", placeholder="e.g., What are the main issues to be discussed at COP29?")
+    question = st.text_input("Type your question here:", placeholder="e.g., What are the main issues to be discussed at COP30?")
     
     if st.button("Get Answer"):
         if model_option == "OpenAI (GPT-3.5)" and not openai_api_key:
@@ -508,7 +521,7 @@ with tab1:
                     else:
                         # Use Llama models directly
                         # First get context from retriever
-                        retrieved_docs = retriever.get_relevant_documents(question)
+                        retrieved_docs = retriever.invoke({"query": question})
                         context = "\n\n".join([doc.page_content for doc in retrieved_docs])
                         
                         # Create prompt with context
@@ -689,92 +702,264 @@ with tab2:
 
 # Tab 3: Brazil & Dengue
 with tab3:
-    st.header("Brazil Climate and Dengue Fever")
-    
-    # Load Brazil-specific data
-    brazil_data = get_brazil_climate_data()
-    
-    # Visualization selector
-    viz_option = st.selectbox(
-        "Select data to visualize:",
-        ["Temperature and Dengue Cases", "Rainfall Changes", "Dengue Cases by Year"]
+    """
+    Function to display the Brazil and Dengue tab content
+    """
+    # App title and description
+    st.header("Dengue Cases in Brazil: Two-Decade Comparison")
+    st.markdown("""
+    This visualization shows the significant increase in dengue cases in Brazil over three time periods:
+    - January 2000 to June 2004
+    - January 2010 to June 2014
+    - January 2020 to June 2024
+    """)
+
+    # Create dataframe with the dengue cases data
+    data = {
+        'Period': ['Jan 2000 - Jun 2004', 'Jan 2010 - Jun 2014', 'Jan 2020 - Jun 2024'],
+        'Probable Cases': [2073194, 6260684, 11236426],
+        'Start Year': [2000, 2010, 2020],
+        'Years': ['2000-2004', '2010-2014', '2020-2024']
+    }
+
+    df = pd.DataFrame(data)
+
+    # Create visualization select box
+    viz_type = st.selectbox(
+        "Select Visualization Type",
+        ["Bar Chart", "Line Chart", "Area Chart", "Comparative Analysis"]
     )
+
+    # Display raw data if requested
+    if st.checkbox("Show Raw Data"):
+        st.subheader("Raw Data")
+        st.dataframe(df)
+
+    # Calculate additional statistics
+    total_cases = df['Probable Cases'].sum()
+    percent_increase_first_decade = ((df['Probable Cases'][1] - df['Probable Cases'][0]) / df['Probable Cases'][0]) * 100
+    percent_increase_second_decade = ((df['Probable Cases'][2] - df['Probable Cases'][1]) / df['Probable Cases'][1]) * 100
+    percent_increase_total = ((df['Probable Cases'][2] - df['Probable Cases'][0]) / df['Probable Cases'][0]) * 100
+
+    # Main visualization area
+    st.subheader(f"Visualization: {viz_type}")
+
+    if viz_type == "Bar Chart":
+        # Creating the bar chart with Altair for better interactivity
+        chart = alt.Chart(df).mark_bar().encode(
+            x=alt.X('Period:N', title='Time Period', sort=None),
+            y=alt.Y('Probable Cases:Q', title='Number of Probable Dengue Cases'),
+            color=alt.Color('Period:N', legend=None),
+            tooltip=['Period', 'Probable Cases']
+        ).properties(
+            height=400
+        ).interactive()
+        
+        st.altair_chart(chart, use_container_width=True)
+
+    elif viz_type == "Line Chart":
+        # Create a line chart
+        chart = alt.Chart(df).mark_line(point=True).encode(
+            x=alt.X('Start Year:Q', title='Starting Year'),
+            y=alt.Y('Probable Cases:Q', title='Number of Probable Dengue Cases'),
+            tooltip=['Period', 'Probable Cases']
+        ).properties(
+            height=400
+        ).interactive()
+        
+        st.altair_chart(chart, use_container_width=True)
+
+    elif viz_type == "Area Chart":
+        # Create an area chart
+        chart = alt.Chart(df).mark_area().encode(
+            x=alt.X('Period:N', title='Time Period', sort=None),
+            y=alt.Y('Probable Cases:Q', title='Number of Probable Dengue Cases'),
+            color=alt.Color('Period:N', legend=None),
+            tooltip=['Period', 'Probable Cases']
+        ).properties(
+            height=400
+        ).interactive()
+        
+        st.altair_chart(chart, use_container_width=True)
+
+    elif viz_type == "Comparative Analysis":
+        # Create a more detailed analysis with multiple charts
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Total Cases by Period")
+            chart1 = alt.Chart(df).mark_bar().encode(
+                x=alt.X('Period:N', title='Time Period', sort=None),
+                y=alt.Y('Probable Cases:Q', title='Number of Probable Cases'),
+                color=alt.Color('Period:N', legend=None),
+                tooltip=['Period', 'Probable Cases']
+            ).properties(
+                height=300
+            ).interactive()
+            
+            st.altair_chart(chart1, use_container_width=True)
+        
+        with col2:
+            st.subheader("Growth Trend")
+            chart2 = alt.Chart(df).mark_line(point=True).encode(
+                x=alt.X('Start Year:Q', title='Starting Year'),
+                y=alt.Y('Probable Cases:Q', title='Number of Probable Cases'),
+                tooltip=['Period', 'Probable Cases']
+            ).properties(
+                height=300
+            ).interactive()
+            
+            st.altair_chart(chart2, use_container_width=True)
+        
+        # Create percentage increase visualization
+        st.subheader("Percentage Increase Between Periods")
+        
+        increase_data = {
+            'Comparison': ['2000-2004 vs 2010-2014', '2010-2014 vs 2020-2024', 'Total (2000-2004 vs 2020-2024)'],
+            'Percentage Increase': [percent_increase_first_decade, percent_increase_second_decade, percent_increase_total]
+        }
+        
+        increase_df = pd.DataFrame(increase_data)
+        
+        chart3 = alt.Chart(increase_df).mark_bar().encode(
+            x=alt.X('Comparison:N', title='Comparison Period'),
+            y=alt.Y('Percentage Increase:Q', title='Percentage Increase (%)'),
+            color=alt.Color('Comparison:N', legend=None),
+            tooltip=['Comparison', 'Percentage Increase']
+        ).properties(
+            height=300
+        ).interactive()
+        
+        st.altair_chart(chart3, use_container_width=True)
+
+    # Key metrics display
+    st.subheader("Key Metrics")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            label="Total Dengue Cases (2000-2024)",
+            value=f"{total_cases:,}"
+        )
+
+    with col2:
+        st.metric(
+            label="Increase (2000-2004 to 2010-2014)",
+            value=f"{percent_increase_first_decade:.1f}%",
+            delta=f"{df['Probable Cases'][1] - df['Probable Cases'][0]:,} cases"
+        )
+
+    with col3:
+        st.metric(
+            label="Increase (2010-2014 to 2020-2024)",
+            value=f"{percent_increase_second_decade:.1f}%",
+            delta=f"{df['Probable Cases'][2] - df['Probable Cases'][1]:,} cases"
+        )
+
+    # Additional insights
+    st.subheader("Key Insights")
+    st.markdown(f"""
+    - From 2000-2004 to 2020-2024, there was a **{percent_increase_total:.1f}%** increase in probable dengue cases in Brazil.
+    - The total number of reported probable dengue cases across all three periods was **{total_cases:,}**.
+    - The most recent period (2020-2024) accounts for **{(df['Probable Cases'][2]/total_cases*100):.1f}%** of all dengue cases in the recorded periods.
+    - Between 2010-2014 and 2020-2024, there was an increase of **{df['Probable Cases'][2] - df['Probable Cases'][1]:,}** cases.
+    """)
+
+    # Add download functionality for the data
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label="Download Data as CSV",
+        data=csv,
+        file_name="dengue_cases_brazil.csv",
+        mime="text/csv",
+    )
+    # st.header("Brazil Climate and Dengue Fever")
     
-    if viz_option == "Temperature and Dengue Cases":
-        st.subheader("Temperature Anomalies and Dengue Cases in Brazil")
+    # # Load Brazil-specific data
+    # brazil_data = get_brazil_climate_data()
+    
+    # # Visualization selector
+    # viz_option = st.selectbox(
+    #     "Select data to visualize:",
+    #     ["Temperature and Dengue Cases", "Rainfall Changes", "Dengue Cases by Year"]
+    # )
+    
+    # if viz_option == "Temperature and Dengue Cases":
+    #     st.subheader("Temperature Anomalies and Dengue Cases in Brazil")
         
-        # Create two y-axes
-        fig, ax1 = plt.subplots(figsize=(12, 6))
+    #     # Create two y-axes
+    #     fig, ax1 = plt.subplots(figsize=(12, 6))
         
-        color = 'tab:red'
-        ax1.set_xlabel('Year')
-        ax1.set_ylabel('Temperature Anomaly (°C)', color=color)
-        ax1.plot(brazil_data['Year'], brazil_data['Temperature_Anomaly'], color=color, marker='o')
-        ax1.tick_params(axis='y', labelcolor=color)
+    #     color = 'tab:red'
+    #     ax1.set_xlabel('Year')
+    #     ax1.set_ylabel('Temperature Anomaly (°C)', color=color)
+    #     ax1.plot(brazil_data['Year'], brazil_data['Temperature_Anomaly'], color=color, marker='o')
+    #     ax1.tick_params(axis='y', labelcolor=color)
         
-        ax2 = ax1.twinx()
-        color = 'tab:blue'
-        ax2.set_ylabel('Dengue Cases', color=color)
-        ax2.plot(brazil_data['Year'], brazil_data['Dengue_Cases'], color=color, marker='s')
-        ax2.tick_params(axis='y', labelcolor=color)
+    #     ax2 = ax1.twinx()
+    #     color = 'tab:blue'
+    #     ax2.set_ylabel('Dengue Cases', color=color)
+    #     ax2.plot(brazil_data['Year'], brazil_data['Dengue_Cases'], color=color, marker='s')
+    #     ax2.tick_params(axis='y', labelcolor=color)
         
-        fig.tight_layout()
-        plt.title('Temperature Anomalies and Dengue Cases in Brazil')
-        plt.grid(True, alpha=0.3)
+    #     fig.tight_layout()
+    #     plt.title('Temperature Anomalies and Dengue Cases in Brazil')
+    #     plt.grid(True, alpha=0.3)
         
-        st.pyplot(fig)
+    #     st.pyplot(fig)
         
-        st.write("This visualization shows the relationship between rising temperatures and dengue cases in Brazil. As temperatures have increased, there has been a corresponding rise in dengue cases, particularly accelerating in recent years.")
+    #     st.write("This visualization shows the relationship between rising temperatures and dengue cases in Brazil. As temperatures have increased, there has been a corresponding rise in dengue cases, particularly accelerating in recent years.")
         
-    elif viz_option == "Rainfall Changes":
-        st.subheader("Annual Rainfall Changes in Brazil")
+    # elif viz_option == "Rainfall Changes":
+    #     st.subheader("Annual Rainfall Changes in Brazil")
         
-        fig, ax = plt.subplots(figsize=(12, 6))
-        bars = ax.bar(brazil_data['Year'], brazil_data['Rainfall_Change_Percent'], width=0.7)
+    #     fig, ax = plt.subplots(figsize=(12, 6))
+    #     bars = ax.bar(brazil_data['Year'], brazil_data['Rainfall_Change_Percent'], width=0.7)
         
-        # Color bars based on values
-        for i, bar in enumerate(bars):
-            if brazil_data['Rainfall_Change_Percent'].iloc[i] < 0:
-                bar.set_color('brown')
-            else:
-                bar.set_color('green')
+    #     # Color bars based on values
+    #     for i, bar in enumerate(bars):
+    #         if brazil_data['Rainfall_Change_Percent'].iloc[i] < 0:
+    #             bar.set_color('brown')
+    #         else:
+    #             bar.set_color('green')
                 
-        ax.set_title('Annual Rainfall Change in Brazil (%)')
-        ax.set_xlabel('Year')
-        ax.set_ylabel('Rainfall Change (%)')
-        ax.grid(True, alpha=0.3, axis='y')
+    #     ax.set_title('Annual Rainfall Change in Brazil (%)')
+    #     ax.set_xlabel('Year')
+    #     ax.set_ylabel('Rainfall Change (%)')
+    #     ax.grid(True, alpha=0.3, axis='y')
         
-        st.pyplot(fig)
+    #     st.pyplot(fig)
         
-        st.write("Brazil has experienced an overall trend of decreased rainfall in many regions, which affects water availability for communities, agriculture, and ecosystems. This pattern is consistent with climate change projections for parts of Brazil.")
+    #     st.write("Brazil has experienced an overall trend of decreased rainfall in many regions, which affects water availability for communities, agriculture, and ecosystems. This pattern is consistent with climate change projections for parts of Brazil.")
         
-    else:  # Dengue Cases by Year
-        st.subheader("Dengue Fever Cases in Brazil by Year")
+    # else:  # Dengue Cases by Year
+    #     st.subheader("Dengue Fever Cases in Brazil by Year")
         
-        fig = px.bar(brazil_data, x='Year', y='Dengue_Cases',
-                    title='Annual Dengue Cases in Brazil',
-                    labels={'Dengue_Cases': 'Number of Cases'},
-                    color='Dengue_Cases',
-                    color_continuous_scale='YlOrRd')
+    #     fig = px.bar(brazil_data, x='Year', y='Dengue_Cases',
+    #                 title='Annual Dengue Cases in Brazil',
+    #                 labels={'Dengue_Cases': 'Number of Cases'},
+    #                 color='Dengue_Cases',
+    #                 color_continuous_scale='YlOrRd')
         
-        fig.update_layout(hovermode="x unified")
-        st.plotly_chart(fig, use_container_width=True)
+    #     fig.update_layout(hovermode="x unified")
+    #     st.plotly_chart(fig, use_container_width=True)
         
-        # Calculate statistics
-        recent_average = brazil_data[brazil_data['Year'] >= 2020]['Dengue_Cases'].mean()
-        early_average = brazil_data[brazil_data['Year'] < 2000]['Dengue_Cases'].mean()
-        percent_increase = ((recent_average - early_average) / early_average) * 100
+    #     # Calculate statistics
+    #     recent_average = brazil_data[brazil_data['Year'] >= 2020]['Dengue_Cases'].mean()
+    #     early_average = brazil_data[brazil_data['Year'] < 2000]['Dengue_Cases'].mean()
+    #     percent_increase = ((recent_average - early_average) / early_average) * 100
         
-        st.metric("Average Annual Cases (2020-2023)", f"{int(recent_average):,}", 
-                 f"{percent_increase:.1f}% since 1990s")
+    #     st.metric("Average Annual Cases (2020-2023)", f"{int(recent_average):,}", 
+    #              f"{percent_increase:.1f}% since 1990s")
         
-        st.write("Dengue cases in Brazil have increased dramatically over the past three decades. The most recent years show an unprecedented surge, with over 4 million cases reported in early 2024 alone.")
+    #     st.write("Dengue cases in Brazil have increased dramatically over the past three decades. The most recent years show an unprecedented surge, with over 4 million cases reported in early 2024 alone.")
         
-        st.info("Climate factors contributing to increased dengue transmission include: higher temperatures that extend the mosquito season, changes in precipitation patterns creating more breeding sites, and urbanization creating heat islands that further amplify these effects.")
+    #     st.info("Climate factors contributing to increased dengue transmission include: higher temperatures that extend the mosquito season, changes in precipitation patterns creating more breeding sites, and urbanization creating heat islands that further amplify these effects.")
         
-        # COP29 relevance
-        st.subheader("Relevance to COP29")
-        st.write("Vector-borne diseases like dengue represent a critical public health impact of climate change. At COP29, health adaptation measures and funding for climate-sensitive disease control will be important topics, especially for vulnerable countries like Brazil.")
+    #     # COP30 relevance
+    #     st.subheader("Relevance to COP30")
+    #     st.write("Vector-borne diseases like dengue represent a critical public health impact of climate change. At COP30, health adaptation measures and funding for climate-sensitive disease control will be important topics, especially for vulnerable countries like Brazil.")
 
 # Footer
 st.markdown("---")

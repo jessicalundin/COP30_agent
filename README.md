@@ -1,10 +1,10 @@
 # Climate & Health RAG Assistant
 
-A Streamlit application that uses Retrieval-Augmented Generation (RAG) to answer questions about climate change, COP29, Brazil, and Dengue fever, while also providing data visualizations and carbon emissions tracking.
+A Streamlit application that uses Retrieval-Augmented Generation (RAG) to answer questions about climate change, COP30, Brazil, and Dengue fever, while also providing data visualizations and carbon emissions tracking.
 
 ## Features
 
-- **RAG Question-Answering System**: Ask questions about climate change, COP29, Brazil, and Dengue fever to get informed responses backed by documents.
+- **RAG Question-Answering System**: Ask questions about climate change, COP30, Brazil, and Dengue fever to get informed responses backed by documents.
 - **Multiple LLM Options**: Choose between OpenAI GPT-3.5 or local Llama 3.2 models (1B or 3B) for inference.
 - **User Authentication**: Protect your application and API key with username and password authentication.
 - **Carbon Emissions Tracking**: See the carbon footprint of your queries in real-time and compare different models.
@@ -35,6 +35,9 @@ OPENAI_API_KEY=your_api_key_here
 # Authentication credentials (change these for security)
 APP_USERNAME=
 APP_PASSWORD=
+
+# Hugging Face Token (HF_TOKEN)
+HF_TOKEN=your_token_here
 ```
 
 ## Usage
@@ -84,7 +87,7 @@ The application shows:
 
 - Global temperature data: NASA GISS Surface Temperature Analysis
 - Brazil climate and Dengue data: Simulated data based on trends from scientific literature and reports
-- COP29 and Dengue information: Compiled from authoritative sources
+- COP30 and Dengue information: Compiled from authoritative sources
 - Carbon emissions data: CodeCarbon measurements and published research
 
 ## Requirements
@@ -100,3 +103,9 @@ When using Llama models locally, initial loading may take some time depending on
 ## License
 
 MIT 
+
+## Environment Setup
+
+### Required Environment Variables
+
+Create a `.env` file in the root directory with the following variables: 
